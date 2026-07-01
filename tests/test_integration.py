@@ -297,6 +297,19 @@ class TestErrorHandling:
             with pytest.raises(requests.exceptions.ConnectTimeout):
                 api.send_status_request()
 
+    def test_local_network_retry_policy_is_bounded(self):
+        """Test local command retries are bounded and avoid replaying writes."""
+        api = MitsubishiAPI("192.168.1.100")
+
+        retries = api.session.adapters["http://"].max_retries
+
+        assert api.api_timeout == (2, 5)
+        assert retries.total == 1
+        assert retries.connect == 1
+        assert retries.read == 0
+        assert retries.status == 0
+        assert retries.other == 0
+
 
 class TestRealWorldScenarios:
     """Test realistic usage scenarios."""
