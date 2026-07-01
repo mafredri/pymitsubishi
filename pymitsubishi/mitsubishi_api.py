@@ -49,13 +49,14 @@ class MitsubishiAPI:
         self.session = requests.Session()
 
         # Retry and timeouts:
-        # We are on a local WiFi network. If the device is actually reachable, we except
+        # We are on a local WiFi network. If the device is actually reachable, we expect
         # a very fast connect time. Linux retries the SYN after 1 second, so by giving a
         # 2 second connect timeout, we get 2 tries to get the TCP connection open.
         #
-        # Read timeout can be greater
+        # Retry one connection failure, but do not retry read timeouts: writes may have
+        # reached the device, so replaying commands is unsafe.
         self.api_timeout = (2, 5)
-        retries = Retry(total=4, backoff_factor=1)
+        retries = Retry(total=1, connect=1, read=0, status=0, other=0, backoff_factor=0.2)
         self.session.mount("http://", HTTPAdapter(max_retries=retries))
 
     def get_crypto_key(self) -> bytes:
