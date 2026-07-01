@@ -6,6 +6,7 @@ This module is responsible for managing control operations and state
 for Mitsubishi MAC-577IF-2E devices.
 """
 
+import dataclasses
 import logging
 from typing import Any
 import xml.etree.ElementTree as ET
@@ -47,8 +48,7 @@ class MitsubishiChangeSet:
         self.changes |= Controls.PowerOnOff
 
     def set_mode(self, drive_mode: DriveMode):
-        mode_value = 8 if drive_mode == DriveMode.AUTO else drive_mode.value
-        self.desired_state.drive_mode = mode_value
+        self.desired_state.drive_mode = drive_mode
         self.changes |= Controls.DriveMode
 
     def set_temperature(self, temperature: float):
@@ -136,7 +136,7 @@ class MitsubishiController:
         self._ensure_state_available()
         if self.state is None or self.state.general is None:
             raise RuntimeError("Failed to fetch device state")
-        return MitsubishiChangeSet(self.state.general)
+        return MitsubishiChangeSet(dataclasses.replace(self.state.general))
 
     def apply_changeset(self, cs: MitsubishiChangeSet) -> ParsedDeviceState | None:
         new_state = None
@@ -238,11 +238,12 @@ class MitsubishiController:
         return new_state
 
     def set_remote_lock(self, lock: RemoteLock) -> ParsedDeviceState:
-        self._ensure_state_available()
-
-        updated_state = self._create_updated_state(remote_lock=lock)
-        new_state = self._send_general_control_command(updated_state, Controls.RemoteLock)
-        self.state = new_state
+        cs = self.changeset()
+        cs.desired_state.remote_lock = lock
+        cs.changes |= Controls.RemoteLock
+        new_state = self.apply_changeset(cs)
+        if new_state is None:
+            raise RuntimeError("Failed to send remote lock command")
         return new_state
 
     def _send_general_control_command(self, state: GeneralStates, controls: Controls) -> ParsedDeviceState:
@@ -250,14 +251,20 @@ class MitsubishiController:
         # Generate the hex command
         hex_command = state.generate_general_command(controls).hex()
         response = self.api.send_hex_command(hex_command)
-        return self._parse_status_response(response)
+        response_state = self._parse_status_response(response)
+        response_state.general = dataclasses.replace(state)
+        self.state = response_state
+        return response_state
 
     def _send_extend08_command(self, state: GeneralStates, controls: Controls08) -> ParsedDeviceState:
         """Send an extend08 command for advanced features"""
         # Generate the hex command
         hex_command = state.generate_extend08_command(controls).hex()
         response = self.api.send_hex_command(hex_command)
-        return self._parse_status_response(response)
+        response_state = self._parse_status_response(response)
+        response_state.general = dataclasses.replace(state)
+        self.state = response_state
+        return response_state
 
     def enable_echonet(self) -> None:
         """Send ECHONET enable command"""
