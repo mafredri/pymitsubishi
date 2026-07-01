@@ -243,7 +243,10 @@ class GeneralStates:
         controls |= Controls.OutsideControl
         cmd[5:7] = controls.to_bytes(2, byteorder="big", signed=False)
         cmd[7] = self.power_on_off.value
-        cmd[8] = self.drive_mode.value if isinstance(self.drive_mode, DriveMode) else self.drive_mode
+        if self.drive_mode == DriveMode.AUTO and (controls & Controls.DriveMode):
+            cmd[8] = 8
+        else:
+            cmd[8] = self.drive_mode.value if isinstance(self.drive_mode, DriveMode) else self.drive_mode
         # TODO: figure out how to combine mode with iSee; Mode changes don't seem to work when >0x08
         cmd[9] = 31 - int(self.temperature)
         cmd[10] = self.wind_speed.value
